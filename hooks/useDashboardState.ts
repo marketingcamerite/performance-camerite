@@ -1,11 +1,8 @@
-
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { YEARS, SEGMENTS, ZEROS_5 } from '../constants';
-import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData, SupabaseConfig } from '../types';
+import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData } from '../types';
 import { parseBRNumber } from '../utils/helpers';
-import { stateToWorkbook, workbookToState } from '../utils/excel';
-import * as XLSX from 'xlsx';
-import { createClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 const defaultFWMonth = (): FWMonth => ({
   weeks: 5,
@@ -44,7 +41,7 @@ const generateInitialData = () => {
   return data;
 };
 
-const useDashboardState = () => {
+const useDashboardState = (supabase: SupabaseClient, userId: string) => {
   const now = new Date();
   const currentYear = YEARS.includes(now.getFullYear()) ? now.getFullYear() : YEARS[0];
   const currentMonth = now.getMonth();
@@ -57,52 +54,51 @@ const useDashboardState = () => {
     data: generateInitialData(),
   });
 
-  // Database Config State
-  const [dbConfig, setDbConfig] = useState<SupabaseConfig | null>(() => {
-    const saved = localStorage.getItem('supabase_config');
-    return saved ? JSON.parse(saved) : null;
-  });
   const [dbStatus, setDbStatus] = useState<'disconnected' | 'connected' | 'syncing' | 'error'>('disconnected');
+  const isInitialLoad = useRef(true);
   
-  // Load initial data from DB
+  // Load initial data from DB based on User ID
   useEffect(() => {
-    if (!dbConfig) {
-        setDbStatus('disconnected');
-        return;
-    }
+    if (!userId || !supabase) return;
 
     const loadFromDb = async () => {
         setDbStatus('syncing');
         try {
-            const supabase = createClient(dbConfig.url, dbConfig.key);
+            // Busca dados onde user_id é igual ao ID do usuário autenticado
             const { data, error } = await supabase
                 .from('dashboards')
                 .select('content')
-                .eq('id', dbConfig.dashboardId)
-                .single();
+                .eq('user_id', userId)
+                .maybeSingle();
             
             if (error) throw error;
 
-            if (data && data.content && Object.keys(data.content).length > 0) {
-                // Merge saved data with structure to ensure no missing fields if schema changed
+            if (data && data.content) {
                 const loadedData = data.content as AppState;
-                // We apply it, assuming it matches. A deeper merge might be safer in production.
-                setState(prev => ({...prev, ...loadedData, mode: prev.mode})); // Keep local mode pref
+                setState(prev => ({...prev, ...loadedData, mode: prev.mode})); // Mantém modo de visualização local
                 setDbStatus('connected');
             } else {
-                // If no data exists yet, we'll just stay connected and save current state shortly
+                // Se não existe, cria um registro inicial vazio para este usuário
+                const { error: insertError } = await supabase
+                    .from('dashboards')
+                    .insert({ user_id: userId, content: state });
+                
+                if (insertError) throw insertError;
                 setDbStatus('connected');
             }
         } catch (err) {
             console.error("DB Load Error:", err);
             setDbStatus('error');
+        } finally {
+            isInitialLoad.current = false;
         }
     };
     loadFromDb();
-  }, [dbConfig]);
+  }, [userId, supabase]);
 
-  // Debounced Save to DB
+  // Auto-save to DB
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   useEffect(() => {
       if (isInitialLoad.current || !userId) return;
 
@@ -117,7 +113,7 @@ const useDashboardState = () => {
                     user_id: userId, 
                     content: state, 
                     updated_at: new Date().toISOString() 
-                }, { onConflict: 'user_id' }); // <--- ADICIONE ESTA PARTE
+                }, { onConflict: 'user_id' }); // <--- CORREÇÃO AQUI: Adicionado onConflict
             
             if (error) throw error;
             setDbStatus('connected');
@@ -127,20 +123,11 @@ const useDashboardState = () => {
         }
       }, 2000); // 2 second debounce
 
-return () => {
+      return () => {
           if(timeoutRef.current) clearTimeout(timeoutRef.current);
       }
   }, [state, userId, supabase]);
 
-
-  const updateDbConfig = (config: SupabaseConfig | null) => {
-      if (config) {
-          localStorage.setItem('supabase_config', JSON.stringify(config));
-      } else {
-          localStorage.removeItem('supabase_config');
-      }
-      setDbConfig(config);
-  };
 
   const updateState = useCallback(<T,>(key: keyof AppState, value: T) => {
     setState(prevState => ({ ...prevState, [key]: value }));
@@ -164,7 +151,7 @@ return () => {
     subArea: string,
     metric: string,
     weekIndex: number,
-    value: number,
+    value: number | string,
     subMetric?: 'leads' | 'views'
   ) => {
       updateNestedState(draft => {
@@ -203,11 +190,11 @@ return () => {
       });
   };
   
-  const updateSocialMetric = (network: string, metric: string, weekIndex: number, value: string) => {
+  const updateSocialMetric = (network: string, metric: string, weekIndex: number, value: string | number) => {
     updateNestedState(draft => {
       const socialData = draft.data['Redes Sociais'][draft.year][draft.month] as SocialMonth;
       if (socialData.networks[network] && socialData.networks[network][metric]) {
-        socialData.networks[network][metric][weekIndex] = parseBRNumber(value);
+        socialData.networks[network][metric][weekIndex] = value;
       }
     });
   };
@@ -250,26 +237,9 @@ return () => {
     });
   };
 
-  const exportState = () => {
-    const wb = stateToWorkbook(state);
-    XLSX.writeFile(wb, `camerite-dashboard-data.xlsx`);
-  };
-
-  const importState = async (file: File) => {
-    try {
-      const newState = await workbookToState(file, state);
-      setState(newState);
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao importar o arquivo XLSX. Verifique se o formato está correto.');
-    }
-  };
-
   return {
     state,
     dbStatus,
-    dbConfig,
-    updateDbConfig,
     setYear,
     setMonth,
     setSegment,
@@ -282,8 +252,6 @@ return () => {
     removeSocialNetwork,
     addSocialMetric,
     removeSocialMetric,
-    exportState,
-    importState
   };
 };
 
