@@ -1,5 +1,5 @@
 
-export type WeeklyData = number[];
+export type WeeklyData = (number | string)[];
 
 export type Segment = 'Franquias' | 'White Label' | 'Redes Sociais';
 
