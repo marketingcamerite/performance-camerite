@@ -104,19 +104,20 @@ const useDashboardState = () => {
   // Debounced Save to DB
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-      if (!dbConfig || dbStatus === 'disconnected' || dbStatus === 'error') return;
+      if (isInitialLoad.current || !userId) return;
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
+      setDbStatus('syncing');
       timeoutRef.current = setTimeout(async () => {
-        setDbStatus('syncing');
         try {
-            const supabase = createClient(dbConfig.url, dbConfig.key);
-            // We only save the data part to avoid saving UI state like "current month" if desired, 
-            // but saving everything allows user to pick up where they left off.
             const { error } = await supabase
                 .from('dashboards')
-                .upsert({ id: dbConfig.dashboardId, content: state, updated_at: new Date().toISOString() });
+                .upsert({ 
+                    user_id: userId, 
+                    content: state, 
+                    updated_at: new Date().toISOString() 
+                }, { onConflict: 'user_id' }); // <--- ADICIONE ESTA PARTE
             
             if (error) throw error;
             setDbStatus('connected');
@@ -126,10 +127,10 @@ const useDashboardState = () => {
         }
       }, 2000); // 2 second debounce
 
-      return () => {
+return () => {
           if(timeoutRef.current) clearTimeout(timeoutRef.current);
       }
-  }, [state, dbConfig]);
+  }, [state, userId, supabase]);
 
 
   const updateDbConfig = (config: SupabaseConfig | null) => {
