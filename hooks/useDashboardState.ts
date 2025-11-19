@@ -1,8 +1,13 @@
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { YEARS, SEGMENTS, ZEROS_5 } from '../constants';
 import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData } from '../types';
 import { parseBRNumber } from '../utils/helpers';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { stateToWorkbook, workbookToState } from '../utils/excel';
+import * as XLSX from 'xlsx';
+
+const LOCAL_STORAGE_KEY = 'camerite_dashboard_data';
 
 const defaultFWMonth = (): FWMonth => ({
   weeks: 5,
@@ -41,7 +46,7 @@ const generateInitialData = () => {
   return data;
 };
 
-const useDashboardState = (supabase: SupabaseClient, userId: string) => {
+const useDashboardState = (supabase: SupabaseClient | null, userId: string | null) => {
   const now = new Date();
   const currentYear = YEARS.includes(now.getFullYear()) ? now.getFullYear() : YEARS[0];
   const currentMonth = now.getMonth();
@@ -57,71 +62,85 @@ const useDashboardState = (supabase: SupabaseClient, userId: string) => {
   const [dbStatus, setDbStatus] = useState<'disconnected' | 'connected' | 'syncing' | 'error'>('disconnected');
   const isInitialLoad = useRef(true);
   
-  // Load initial data from DB based on User ID
+  // Load initial data (Hybrid: DB or LocalStorage)
   useEffect(() => {
-    if (!userId || !supabase) return;
-
-    const loadFromDb = async () => {
+    const loadData = async () => {
         setDbStatus('syncing');
         try {
-            // Busca dados onde user_id é igual ao ID do usuário autenticado
-            const { data, error } = await supabase
-                .from('dashboards')
-                .select('content')
-                .eq('user_id', userId)
-                .maybeSingle();
-            
-            if (error) throw error;
-
-            if (data && data.content) {
-                const loadedData = data.content as AppState;
-                setState(prev => ({...prev, ...loadedData, mode: prev.mode})); // Mantém modo de visualização local
-                setDbStatus('connected');
-            } else {
-                // Se não existe, cria um registro inicial vazio para este usuário
-                const { error: insertError } = await supabase
+            if (userId && supabase) {
+                // Online Mode
+                const { data, error } = await supabase
                     .from('dashboards')
-                    .insert({ user_id: userId, content: state });
+                    .select('content')
+                    .eq('user_id', userId)
+                    .maybeSingle();
                 
-                if (insertError) throw insertError;
-                setDbStatus('connected');
+                if (error) throw error;
+
+                if (data && data.content) {
+                    const loadedData = data.content as AppState;
+                    setState(prev => ({...prev, ...loadedData, mode: prev.mode})); 
+                    setDbStatus('connected');
+                } else {
+                    // Create entry if not exists
+                    const { error: insertError } = await supabase
+                        .from('dashboards')
+                        .insert({ user_id: userId, content: state });
+                    if (insertError) throw insertError;
+                    setDbStatus('connected');
+                }
+            } else {
+                // Offline Mode (Local Storage)
+                const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (localData) {
+                    const parsed = JSON.parse(localData);
+                    setState(prev => ({...prev, ...parsed, mode: prev.mode}));
+                }
+                setDbStatus('disconnected'); // Not connected to DB, but "Ready" locally
             }
         } catch (err) {
-            console.error("DB Load Error:", err);
+            console.error("Data Load Error:", err);
             setDbStatus('error');
         } finally {
             isInitialLoad.current = false;
         }
     };
-    loadFromDb();
+    loadData();
   }, [userId, supabase]);
 
-  // Auto-save to DB
+  // Auto-save (Hybrid)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   useEffect(() => {
-      if (isInitialLoad.current || !userId) return;
+      if (isInitialLoad.current) return;
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      setDbStatus('syncing');
+      // Se estiver offline, não mostra 'syncing' visualmente para não poluir, ou mostra? 
+      // Vamos mostrar syncing apenas se tiver user. Se for local, é instantaneo.
+      if (userId) setDbStatus('syncing');
+
       timeoutRef.current = setTimeout(async () => {
         try {
-            const { error } = await supabase
-                .from('dashboards')
-                .upsert({ 
-                    user_id: userId, 
-                    content: state, 
-                    updated_at: new Date().toISOString() 
-                }, { onConflict: 'user_id' }); // <--- CORREÇÃO AQUI: Adicionado onConflict
-            
-            if (error) throw error;
-            setDbStatus('connected');
+            if (userId && supabase) {
+                const { error } = await supabase
+                    .from('dashboards')
+                    .upsert({ 
+                        user_id: userId, 
+                        content: state, 
+                        updated_at: new Date().toISOString() 
+                    });
+                if (error) throw error;
+                setDbStatus('connected');
+            } else {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+                setDbStatus('disconnected');
+            }
         } catch (err) {
-            console.error("DB Save Error:", err);
+            console.error("Save Error:", err);
             setDbStatus('error');
         }
-      }, 2000); // 2 second debounce
+      }, 2000);
 
       return () => {
           if(timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -237,6 +256,21 @@ const useDashboardState = (supabase: SupabaseClient, userId: string) => {
     });
   };
 
+  const exportState = () => {
+    const wb = stateToWorkbook(state);
+    XLSX.writeFile(wb, `camerite-dashboard-data.xlsx`);
+  };
+
+  const importState = async (file: File) => {
+    try {
+      const newState = await workbookToState(file, state);
+      setState(newState);
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao importar o arquivo XLSX. Verifique se o formato está correto.');
+    }
+  };
+
   return {
     state,
     dbStatus,
@@ -252,6 +286,8 @@ const useDashboardState = (supabase: SupabaseClient, userId: string) => {
     removeSocialNetwork,
     addSocialMetric,
     removeSocialMetric,
+    exportState,
+    importState
   };
 };
 

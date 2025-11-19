@@ -20,9 +20,15 @@ export const stateToWorkbook = (state: AppState): XLSX.WorkBook => {
     sub: string, 
     item: string, 
     metric: string, 
-    data: number[]
+    data: (number | string)[]
   ) => {
-    rows.push([segment, year, month, cat, sub, item, metric, ...data] as ExcelRow);
+    const numericData = data.map(v => parseBRNumber(v));
+    // Ensure strictly 5 elements if needed, though WeeklyData usually is 5. 
+    // If data is missing, fill with 0.
+    while(numericData.length < 5) numericData.push(0);
+    const finalData = numericData.slice(0, 5);
+
+    rows.push([segment, year, month, cat, sub, item, metric, ...finalData] as ExcelRow);
   };
 
   SEGMENTS.forEach(segment => {

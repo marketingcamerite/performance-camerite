@@ -21,6 +21,16 @@ interface PaidDataTableProps {
 }
 
 const PaidDataTable: React.FC<PaidDataTableProps> = ({ title, rows, data, onUpdate }) => {
+  
+  // Helper to validate input: only allows numbers, dots and commas
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, metricKey: string, index: number) => {
+      const value = e.target.value;
+      // Regex: allow empty string or string containing only digits, commas and dots
+      if (value === '' || /^[0-9.,]+$/.test(value)) {
+          onUpdate(metricKey, index, value);
+      }
+  };
+
   return (
     <div>
         {title && <h4 className="text-md font-semibold text-slate-300 mb-2">{title}</h4>}
@@ -52,8 +62,9 @@ const PaidDataTable: React.FC<PaidDataTableProps> = ({ title, rows, data, onUpda
                         {row.type === 'input' ? (
                         <input
                             type="text"
+                            inputMode="decimal"
                             value={data[row.key] ? data[row.key][i] : ''}
-                            onChange={(e) => onUpdate(row.key, i, e.target.value)}
+                            onChange={(e) => handleInputChange(e, row.key, i)}
                             className="w-24 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-slate-200 text-right focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none transition"
                         />
                         ) : (

@@ -4,7 +4,7 @@ import Header from './components/Header';
 import SegmentTabs from './components/SegmentTabs';
 import FwView from './components/FwView';
 import SocialView from './components/SocialView';
-import LoginScreen from './components/LoginScreen';
+import SettingsModal from './components/SettingsModal';
 import useDashboardState from './hooks/useDashboardState';
 import { SEGMENTS } from './constants';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -13,9 +13,9 @@ import type { Segment, FWMonth, SocialMonth, SupabaseConfig } from './types';
 const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [session, setSession] = useState<any>(null);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Carrega configuração inicial e tenta estabelecer sessão
+  // Tenta recuperar sessão existente silenciosamente ou configuração salva, mas não bloqueia
   useEffect(() => {
     const initAuth = async () => {
       const storedConfig = localStorage.getItem('supabase_config');
@@ -32,23 +32,43 @@ const App: React.FC = () => {
             setSession(session);
           });
           
-          setIsLoadingAuth(false);
           return () => subscription.unsubscribe();
         } catch (e) {
-          console.error("Erro ao inicializar Supabase", e);
-          setIsLoadingAuth(false);
+          console.error("Erro ao inicializar Supabase em background", e);
         }
-      } else {
-        setIsLoadingAuth(false);
       }
     };
     initAuth();
   }, []);
 
-  const handleLoginSetup = (config: SupabaseConfig) => {
-    localStorage.setItem('supabase_config', JSON.stringify(config));
-    const client = createClient(config.url, config.key);
-    setSupabase(client);
+  const handleConnect = async (config: SupabaseConfig | null, credentials?: {email: string, password: string}) => {
+    if (!config) {
+        // Desconectar
+        if (supabase) await supabase.auth.signOut();
+        localStorage.removeItem('supabase_config');
+        setSupabase(null);
+        setSession(null);
+        return;
+    }
+
+    try {
+        const client = createClient(config.url, config.key);
+        
+        if (credentials) {
+            const { data, error } = await client.auth.signInWithPassword({
+                email: credentials.email,
+                password: credentials.password
+            });
+            if (error) throw error;
+            setSession(data.session);
+        }
+        
+        setSupabase(client);
+        localStorage.setItem('supabase_config', JSON.stringify(config));
+    } catch (error) {
+        console.error("Connection error", error);
+        throw error; // Propaga para o modal exibir erro
+    }
   };
 
   const handleLogout = async () => {
@@ -58,33 +78,42 @@ const App: React.FC = () => {
     }
   };
 
-  // Se não houver cliente ou sessão, mostra tela de login
-  if (!supabase || !session) {
-    return (
-      <LoginScreen 
-        onSetup={handleLoginSetup} 
-        supabase={supabase} 
-        isLoading={isLoadingAuth}
-      />
-    );
-  }
-
   return (
-    <DashboardContent 
-      supabase={supabase} 
-      session={session} 
-      onLogout={handleLogout} 
-    />
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-violet-500/30 selection:text-violet-200">
+      {/* Background Ambient Effects */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-violet-900/20 rounded-full blur-[120px] animate-pulse" style={{animationDuration: '8s'}}></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse" style={{animationDuration: '10s'}}></div>
+      </div>
+
+      <DashboardContent 
+        supabase={supabase} 
+        session={session} 
+        onLogout={handleLogout}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
+
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onConnect={handleConnect}
+        currentConfig={localStorage.getItem('supabase_config') ? JSON.parse(localStorage.getItem('supabase_config')!) : null}
+        isConnected={!!session}
+        userEmail={session?.user?.email}
+      />
+    </div>
   );
 };
 
-// Componente isolado para o Dashboard para garantir que os hooks só rodem com user logado
+// Componente do Dashboard
 const DashboardContent: React.FC<{
-  supabase: SupabaseClient;
+  supabase: SupabaseClient | null;
   session: any;
   onLogout: () => void;
-}> = ({ supabase, session, onLogout }) => {
-  const { state, dbStatus, ...actions } = useDashboardState(supabase, session.user.id);
+  onOpenSettings: () => void;
+}> = ({ supabase, session, onLogout, onOpenSettings }) => {
+  // Se não tiver sessão, userId é null -> useDashboardState cai em modo LocalStorage
+  const { state, dbStatus, ...actions } = useDashboardState(supabase, session?.user?.id || null);
 
   const handleSegmentChange = (segment: Segment) => {
     actions.setSegment(segment);
@@ -94,13 +123,6 @@ const DashboardContent: React.FC<{
   const monthEnabled = currentData?.weeks !== 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-violet-500/30 selection:text-violet-200">
-      {/* Background Ambient Effects */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-violet-900/20 rounded-full blur-[120px] animate-pulse" style={{animationDuration: '8s'}}></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse" style={{animationDuration: '10s'}}></div>
-      </div>
-
       <div className="relative z-10">
         <Header
           year={state.year}
@@ -109,8 +131,11 @@ const DashboardContent: React.FC<{
           onMonthChange={actions.setMonth}
           isAnnualView={state.mode === 'annual'}
           onToggleAnnualView={actions.toggleMode}
+          onImport={actions.importState}
+          onExport={actions.exportState}
+          onOpenSettings={onOpenSettings}
           dbStatus={dbStatus}
-          userEmail={session.user.email}
+          userEmail={session?.user?.email}
           onLogout={onLogout}
         />
 
@@ -151,7 +176,6 @@ const DashboardContent: React.FC<{
           )}
         </main>
       </div>
-    </div>
   );
 };
 
