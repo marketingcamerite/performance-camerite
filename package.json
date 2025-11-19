@@ -8,23 +8,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d docs"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
     "xlsx": "latest",
-    "@supabase/supabase-js": "2.39.8",
-    "vite": "^5.4.0",
-    "@vitejs/plugin-react": "^4.3.1"
+    "@supabase/supabase-js": "^2.39.8"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "typescript": "~5.5.3",
-    "vite": "^5.4.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1",
     "gh-pages": "^6.1.1"
   }
 }

@@ -1,4 +1,3 @@
-
 import type { Segment } from './types';
 
 export const YEARS: number[] = [2024, 2025, 2026, 2027, 2028, 2029, 2030];

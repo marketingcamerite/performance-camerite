@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Tenta recuperar sessão existente silenciosamente ou configuração salva, mas não bloqueia
+  // Tenta recuperar sessão existente silenciosamente ou configuração salva
   useEffect(() => {
     const initAuth = async () => {
       const storedConfig = localStorage.getItem('supabase_config');
@@ -23,18 +23,29 @@ const App: React.FC = () => {
         try {
           const config: SupabaseConfig = JSON.parse(storedConfig);
           const client = createClient(config.url, config.key);
-          setSupabase(client);
-
-          const { data: { session } } = await client.auth.getSession();
-          setSession(session);
-
-          const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-          });
           
-          return () => subscription.unsubscribe();
+          // Validate connection implicitly by checking session
+          const { data: { session } } = await client.auth.getSession();
+          
+          if (session) {
+              setSupabase(client);
+              setSession(session);
+              
+              const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+                setSession(session);
+              });
+              return () => subscription.unsubscribe();
+          } else {
+              // If config exists but no session, we are effectively "configured but logged out"
+              // or the token expired. We keep the config but don't set session.
+              // Ideally, we might prompt user to re-login.
+              setSupabase(client); // Keep client to allow login attempt
+          }
+          
         } catch (e) {
           console.error("Erro ao inicializar Supabase em background", e);
+          // Se falhar a inicialização, limpa para evitar estado "morto"
+          localStorage.removeItem('supabase_config');
         }
       }
     };
@@ -43,18 +54,15 @@ const App: React.FC = () => {
 
   const handleConnect = async (config: SupabaseConfig | null, credentials?: {email: string, password: string}) => {
     if (!config) {
-        // Desconectar
-        if (supabase) await supabase.auth.signOut();
-        localStorage.removeItem('supabase_config');
-        setSupabase(null);
-        setSession(null);
+        await handleDisconnectProject();
         return;
     }
 
     try {
         const client = createClient(config.url, config.key);
         
-        if (credentials) {
+        // Tenta login se credenciais foram fornecidas
+        if (credentials && credentials.email && credentials.password) {
             const { data, error } = await client.auth.signInWithPassword({
                 email: credentials.email,
                 password: credentials.password
@@ -63,6 +71,7 @@ const App: React.FC = () => {
             setSession(data.session);
         }
         
+        // Se chegou aqui sem erro, salva config e client
         setSupabase(client);
         localStorage.setItem('supabase_config', JSON.stringify(config));
     } catch (error) {
@@ -71,11 +80,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
+  const handleDisconnectProject = async () => {
+      if (supabase) await supabase.auth.signOut();
+      localStorage.removeItem('supabase_config');
+      setSupabase(null);
       setSession(null);
-    }
+      window.location.reload(); // Recarrega para garantir estado limpo
   };
 
   return (
@@ -89,7 +99,7 @@ const App: React.FC = () => {
       <DashboardContent 
         supabase={supabase} 
         session={session} 
-        onLogout={handleLogout}
+        onLogout={handleDisconnectProject} // Use full disconnect for the header "Desconectar" button
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
@@ -97,6 +107,7 @@ const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onConnect={handleConnect}
+        onDisconnect={handleDisconnectProject}
         currentConfig={localStorage.getItem('supabase_config') ? JSON.parse(localStorage.getItem('supabase_config')!) : null}
         isConnected={!!session}
         userEmail={session?.user?.email}
@@ -131,8 +142,6 @@ const DashboardContent: React.FC<{
           onMonthChange={actions.setMonth}
           isAnnualView={state.mode === 'annual'}
           onToggleAnnualView={actions.toggleMode}
-          onImport={actions.importState}
-          onExport={actions.exportState}
           onOpenSettings={onOpenSettings}
           dbStatus={dbStatus}
           userEmail={session?.user?.email}
