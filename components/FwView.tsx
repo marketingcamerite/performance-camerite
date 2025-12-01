@@ -7,7 +7,7 @@ import DynamicListManager from './DynamicListManager';
 import PaidDataTable from './PaidDataTable';
 import { sum, parseBRNumber } from '../utils/helpers';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter, ZAxis
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter, ZAxis, AreaChart, Area
 } from 'recharts';
 import { WEEK_LABELS, MONTHS } from '../constants';
 
@@ -78,6 +78,8 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
     const totalPaidLeads = metaLeads + googleLeads;
 
     const opportunities = parseBRNumber(data.pipe.oportunidades[i]);
+    const sales = parseBRNumber(data.pipe.vendas[i]);
+    const leadsTotal = parseBRNumber(data.pipe.leads[i]);
 
     return {
       name,
@@ -86,8 +88,9 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
       investimentoTotal: totalInvest,
       cpl: totalPaidLeads > 0 ? totalInvest / totalPaidLeads : 0,
       cpo: opportunities > 0 ? totalInvest / opportunities : 0,
-      leads: parseBRNumber(data.pipe.leads[i]),
+      leads: leadsTotal,
       oportunidades: opportunities,
+      vendas: sales,
       leadsPlanejadosMeta: parseBRNumber(data.paid.meta.leadsPlan[i]),
       leadsConquistadosMeta: metaLeads,
       leadsPlanejadosGoogle: parseBRNumber(data.paid.google.leadsPlan[i]),
@@ -95,8 +98,17 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
       alcance: parseBRNumber(data.paid.meta.alcance[i]) + parseBRNumber(data.paid.google.alcance[i]),
       impressoes: parseBRNumber(data.paid.meta.impressoes[i]) + parseBRNumber(data.paid.google.impressoes[i]),
       cliques: parseBRNumber(data.paid.meta.cliques[i]) + parseBRNumber(data.paid.google.cliques[i]),
+      // Conversion Rates
+      convLeadOpp: leadsTotal > 0 ? (opportunities / leadsTotal) * 100 : 0,
+      convOppSale: opportunities > 0 ? (sales / opportunities) * 100 : 0,
     }
   });
+
+  const funnelData = [
+      { name: 'Leads', value: sum(data.pipe.leads), fill: '#60a5fa' },
+      { name: 'Oportunidades', value: sum(data.pipe.oportunidades), fill: '#a78bfa' },
+      { name: 'Vendas', value: sum(data.pipe.vendas), fill: '#34d399' },
+  ];
 
   const annualChartData = MONTHS.map((name, i) => {
     const monthData = fullYearData[i];
@@ -251,66 +263,138 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                     </div>
                 </Card>
             ) : (
-                <div className="grid grid-cols-12 gap-6">
-                    <ChartWrapper title="Investimento Semanal (Meta + Google)">
-                        <BarChart data={weeklyChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
-                            <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val/1000}k`} tick={{fontSize: 12}} />
-                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} cursor={{fill: '#1e293b', opacity: 0.5}} />
-                            <Legend />
-                            <Bar dataKey="investimentoMeta" name="Meta" stackId="a" fill="#8b5cf6" radius={[0, 0, 4, 4]} />
-                            <Bar dataKey="investimentoGoogle" name="Google" stackId="a" fill="#34d399" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ChartWrapper>
-                    <ChartWrapper title="CPL Semanal (Pago)">
-                        <LineChart data={weeklyChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
-                            <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
-                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
-                            <Legend />
-                            <Line type="monotone" dataKey="cpl" name="CPL" stroke="#f59e0b" strokeWidth={3} dot={{r: 4, fill: '#f59e0b', strokeWidth: 2, stroke:'#0f172a'}} />
-                        </LineChart>
-                    </ChartWrapper>
-                    <ChartWrapper title="CPO Semanal">
-                        <LineChart data={weeklyChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
-                            <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
-                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
-                            <Legend />
-                            <Line type="monotone" dataKey="cpo" name="CPO" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke:'#0f172a'}} />
-                        </LineChart>
-                    </ChartWrapper>
-                    <ChartWrapper title="Lead x Oportunidade (Semanal)">
-                        <ScatterChart>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                            <XAxis type="number" dataKey="leads" name="Leads" stroke="#64748b" tick={{fontSize: 12}} />
-                            <YAxis type="number" dataKey="oportunidades" name="Oportunidades" stroke="#64748b" tick={{fontSize: 12}} />
-                            <ZAxis type="number" range={[100]} />
-                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}/>
-                            <Legend/>
-                            <Scatter name="Semanas" data={weeklyChartData} fill="#3b82f6"/>
-                        </ScatterChart>
-                    </ChartWrapper>
-                    <Card title="Leads Planejados vs Conquistados" className="col-span-12">
-                        <div className="h-80 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
+                <div className="space-y-10">
+                    <div>
+                        <div className="grid grid-cols-12 gap-6">
+                            <ChartWrapper title="Investimento Semanal (Meta + Google)">
+                                <BarChart data={weeklyChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                    <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val/1000}k`} tick={{fontSize: 12}} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} cursor={{fill: '#1e293b', opacity: 0.5}} />
+                                    <Legend />
+                                    <Bar dataKey="investimentoMeta" name="Meta" stackId="a" fill="#8b5cf6" radius={[0, 0, 4, 4]} />
+                                    <Bar dataKey="investimentoGoogle" name="Google" stackId="a" fill="#34d399" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ChartWrapper>
+                            <ChartWrapper title="CPL Semanal (Pago)">
                                 <LineChart data={weeklyChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                    <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="cpl" name="CPL" stroke="#f59e0b" strokeWidth={3} dot={{r: 4, fill: '#f59e0b', strokeWidth: 2, stroke:'#0f172a'}} />
+                                </LineChart>
+                            </ChartWrapper>
+                            <ChartWrapper title="CPO Semanal">
+                                <LineChart data={weeklyChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                    <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="cpo" name="CPO" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke:'#0f172a'}} />
+                                </LineChart>
+                            </ChartWrapper>
+                            <ChartWrapper title="Lead x Oportunidade (Semanal)">
+                                <ScatterChart>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                    <XAxis type="number" dataKey="leads" name="Leads" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis type="number" dataKey="oportunidades" name="Oportunidades" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <ZAxis type="number" range={[100]} />
+                                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}/>
+                                    <Legend/>
+                                    <Scatter name="Semanas" data={weeklyChartData} fill="#3b82f6"/>
+                                </ScatterChart>
+                            </ChartWrapper>
+                            <Card title="Leads Planejados vs Conquistados" className="col-span-12">
+                                <div className="h-80 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={weeklyChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                            <YAxis stroke="#64748b" tick={{fontSize: 12}} />
+                                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} />
+                                            <Legend />
+                                            <Line type="monotone" dataKey="leadsPlanejadosMeta" name="Meta Planejado" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} />
+                                            <Line type="monotone" dataKey="leadsConquistadosMeta" name="Meta Conquistado" stroke="#8b5cf6" strokeWidth={2} />
+                                            <Line type="monotone" dataKey="leadsPlanejadosGoogle" name="Google Planejado" stroke="#6ee7b7" strokeDasharray="5 5" strokeWidth={2} />
+                                            <Line type="monotone" dataKey="leadsConquistadosGoogle" name="Google Conquistado" stroke="#34d399" strokeWidth={2} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </Card>
+                        </div>
+                    </div>
+
+                    {/* SEÇÃO PIPELINE COMERCIAL */}
+                    <div>
+                        <SectionTitle title="Performance Comercial" subtitle="Análise detalhada do Funil de Vendas (Leads → Oportunidades → Vendas)." />
+                        <div className="grid grid-cols-12 gap-6">
+                            
+                            {/* Gráfico 1: Funil Total Mês */}
+                            <ChartWrapper title="Funil de Vendas (Total Mês)">
+                                <BarChart layout="vertical" data={funnelData} margin={{ left: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                    <XAxis type="number" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis dataKey="name" type="category" stroke="#64748b" tick={{fontSize: 12}} width={100} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} cursor={{fill: '#1e293b', opacity: 0.5}} />
+                                    <Bar dataKey="value" name="Volume" radius={[0, 4, 4, 0]}>
+                                        {funnelData.map((entry, index) => (
+                                            <cell key={`cell-${index}`} fill={entry.fill} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ChartWrapper>
+
+                            {/* Gráfico 2: Evolução Semanal (Area Chart) */}
+                            <ChartWrapper title="Evolução do Pipeline (Semanal)">
+                                <AreaChart data={weeklyChartData}>
+                                    <defs>
+                                        <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/>
+                                        </linearGradient>
+                                        <linearGradient id="colorOpps" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#a78bfa" stopOpacity={0}/>
+                                        </linearGradient>
+                                        <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#34d399" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="#34d399" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis stroke="#64748b" tick={{fontSize: 12}} />
                                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} />
                                     <Legend />
-                                    <Line type="monotone" dataKey="leadsPlanejadosMeta" name="Meta Planejado" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} />
-                                    <Line type="monotone" dataKey="leadsConquistadosMeta" name="Meta Conquistado" stroke="#8b5cf6" strokeWidth={2} />
-                                    <Line type="monotone" dataKey="leadsPlanejadosGoogle" name="Google Planejado" stroke="#6ee7b7" strokeDasharray="5 5" strokeWidth={2} />
-                                    <Line type="monotone" dataKey="leadsConquistadosGoogle" name="Google Conquistado" stroke="#34d399" strokeWidth={2} />
-                                </LineChart>
-                            </ResponsiveContainer>
+                                    <Area type="monotone" dataKey="leads" name="Leads" stroke="#60a5fa" fillOpacity={1} fill="url(#colorLeads)" />
+                                    <Area type="monotone" dataKey="oportunidades" name="Oportunidades" stroke="#a78bfa" fillOpacity={1} fill="url(#colorOpps)" />
+                                    <Area type="monotone" dataKey="vendas" name="Vendas" stroke="#34d399" fillOpacity={1} fill="url(#colorVendas)" />
+                                </AreaChart>
+                            </ChartWrapper>
+
+                            {/* Gráfico 3: Taxas de Conversão */}
+                            <Card title="Taxas de Conversão (Qualidade)" className="col-span-12">
+                                <div className="h-72 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={weeklyChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                            <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={val => `${val.toFixed(0)}%`} />
+                                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(val: number) => `${val.toFixed(2)}%`} />
+                                            <Legend />
+                                            <Line type="monotone" dataKey="convLeadOpp" name="Conversão Lead → Opp" stroke="#fbbf24" strokeWidth={2} dot={{r: 4}} />
+                                            <Line type="monotone" dataKey="convOppSale" name="Conversão Opp → Venda" stroke="#34d399" strokeWidth={2} dot={{r: 4}} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </Card>
+
                         </div>
-                    </Card>
+                    </div>
                 </div>
             )}
         </div>
