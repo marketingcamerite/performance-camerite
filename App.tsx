@@ -4,11 +4,12 @@ import Header from './components/Header';
 import SegmentTabs from './components/SegmentTabs';
 import FwView from './components/FwView';
 import SocialView from './components/SocialView';
+import SiteView from './components/SiteView';
 import SettingsModal from './components/SettingsModal';
 import useDashboardState from './hooks/useDashboardState';
 import { SEGMENTS } from './constants';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Segment, FWMonth, SocialMonth, SupabaseConfig } from './types';
+import type { Segment, FWMonth, SocialMonth, SiteMonth, SupabaseConfig } from './types';
 
 const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -36,15 +37,11 @@ const App: React.FC = () => {
               });
               return () => subscription.unsubscribe();
           } else {
-              // If config exists but no session, we are effectively "configured but logged out"
-              // or the token expired. We keep the config but don't set session.
-              // Ideally, we might prompt user to re-login.
               setSupabase(client); // Keep client to allow login attempt
           }
           
         } catch (e) {
           console.error("Erro ao inicializar Supabase em background", e);
-          // Se falhar a inicialização, limpa para evitar estado "morto"
           localStorage.removeItem('supabase_config');
         }
       }
@@ -71,12 +68,11 @@ const App: React.FC = () => {
             setSession(data.session);
         }
         
-        // Se chegou aqui sem erro, salva config e client
         setSupabase(client);
         localStorage.setItem('supabase_config', JSON.stringify(config));
     } catch (error) {
         console.error("Connection error", error);
-        throw error; // Propaga para o modal exibir erro
+        throw error;
     }
   };
 
@@ -99,7 +95,7 @@ const App: React.FC = () => {
       <DashboardContent 
         supabase={supabase} 
         session={session} 
-        onLogout={handleDisconnectProject} // Use full disconnect for the header "Desconectar" button
+        onLogout={handleDisconnectProject} 
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
@@ -123,7 +119,6 @@ const DashboardContent: React.FC<{
   onLogout: () => void;
   onOpenSettings: () => void;
 }> = ({ supabase, session, onLogout, onOpenSettings }) => {
-  // Se não tiver sessão, userId é null -> useDashboardState cai em modo LocalStorage
   const { state, dbStatus, ...actions } = useDashboardState(supabase, session?.user?.id || null);
 
   const handleSegmentChange = (segment: Segment) => {
@@ -164,6 +159,14 @@ const DashboardContent: React.FC<{
                 onRemoveNetwork={actions.removeSocialNetwork}
                 onAddMetric={actions.addSocialMetric}
                 onRemoveMetric={actions.removeSocialMetric}
+              />
+            ) : state.segment === 'Site' ? (
+              <SiteView 
+                data={currentData as SiteMonth}
+                registry={state.siteRegistry || []} // Pass registry to SiteView
+                isAnnualView={state.mode === 'annual'}
+                fullYearData={state.data['Site'][state.year] as SiteMonth[]}
+                actions={actions}
               />
             ) : (
               <FwView

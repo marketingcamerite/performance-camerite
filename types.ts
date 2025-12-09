@@ -1,7 +1,7 @@
 
 export type WeeklyData = (number | string)[];
 
-export type Segment = 'Franquias' | 'White Label' | 'Redes Sociais';
+export type Segment = 'Franquias' | 'White Label' | 'Redes Sociais' | 'Site';
 
 export interface LandingPageData {
   leads: WeeklyData;
@@ -54,7 +54,35 @@ export interface SocialMonth {
   };
 }
 
-export type MonthlyData = FWMonth | SocialMonth;
+// --- SITE TYPES ---
+
+// Global definition of a page
+export interface SitePageRegistryItem {
+  id: string; // We will use the name as ID to maintain consistency with existing pattern
+  name: string;
+  isHidden: boolean;
+  createdAt?: string;
+}
+
+// Monthly data values for a page
+export interface SitePageValues {
+  views: WeeklyData;
+  unique: WeeklyData;
+}
+
+export interface SiteMonth {
+  weeks: number;
+  kpis: {
+    visitors: number | string;
+    unique: number | string;
+    bounceRate: number | string;
+    avgTime: number | string;
+  };
+  pages: { [pageName: string]: SitePageValues }; // Data only, visibility is in Registry
+  sources: { [sourceName: string]: WeeklyData };
+}
+
+export type MonthlyData = FWMonth | SocialMonth | SiteMonth;
 
 export interface YearData {
   [year: number]: MonthlyData[];
@@ -64,6 +92,7 @@ export interface SegmentData {
   'Franquias': YearData;
   'White Label': YearData;
   'Redes Sociais': YearData;
+  'Site': YearData;
 }
 
 export interface AppState {
@@ -72,6 +101,7 @@ export interface AppState {
   segment: Segment;
   mode: 'weekly' | 'annual';
   data: SegmentData;
+  siteRegistry: SitePageRegistryItem[]; // Global Registry for Site Pages
 }
 
 export interface SupabaseConfig {

@@ -1,7 +1,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { YEARS, SEGMENTS, ZEROS_5 } from '../constants';
-import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData } from '../types';
+import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData, SiteMonth, SitePageRegistryItem } from '../types';
 import { parseBRNumber } from '../utils/helpers';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { stateToWorkbook, workbookToState } from '../utils/excel';
@@ -31,6 +31,23 @@ const defaultSocialMonth = (): SocialMonth => ({
   }
 });
 
+const defaultSiteMonth = (): SiteMonth => ({
+  weeks: 5,
+  kpis: {
+    visitors: 0,
+    unique: 0,
+    bounceRate: 0,
+    avgTime: 0
+  },
+  pages: {
+    // Data is initialized empty, keys will be populated based on interaction or registry
+  },
+  sources: {
+    "Google": ZEROS_5(),
+    "Direto": ZEROS_5()
+  }
+});
+
 const generateInitialData = () => {
   const data: any = {};
   SEGMENTS.forEach(segment => {
@@ -38,6 +55,8 @@ const generateInitialData = () => {
     YEARS.forEach(year => {
       if (segment === 'Redes Sociais') {
         data[segment][year] = Array.from({ length: 12 }, defaultSocialMonth);
+      } else if (segment === 'Site') {
+        data[segment][year] = Array.from({ length: 12 }, defaultSiteMonth);
       } else {
         data[segment][year] = Array.from({ length: 12 }, defaultFWMonth);
       }
@@ -57,11 +76,42 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
     segment: 'Franquias',
     mode: 'weekly',
     data: generateInitialData(),
+    siteRegistry: [], // Initialize empty registry (Global Persistence)
   });
 
   const [dbStatus, setDbStatus] = useState<'disconnected' | 'connected' | 'syncing' | 'error'>('disconnected');
   const isInitialLoad = useRef(true);
   
+  // Helper to migrate legacy data structures to include new tabs/registries
+  const migrateState = (loadedData: any): AppState => {
+      // 1. Ensure 'Site' segment data exists
+      if (!loadedData.data['Site']) {
+          loadedData.data['Site'] = {};
+          YEARS.forEach(y => loadedData.data['Site'][y] = Array.from({ length: 12 }, defaultSiteMonth));
+      }
+
+      // 2. Ensure Global Site Registry exists
+      if (!loadedData.siteRegistry) {
+          loadedData.siteRegistry = [];
+          
+          // Optional: Scan existing months to recover pages from legacy data if they exist
+          const existingPages = new Set<string>();
+          if (loadedData.data['Site']) {
+            Object.values(loadedData.data['Site']).forEach((yearData: any) => {
+                yearData.forEach((m: SiteMonth) => {
+                    if (m.pages) Object.keys(m.pages).forEach(p => existingPages.add(p));
+                });
+            });
+          }
+          
+          existingPages.forEach(p => {
+              loadedData.siteRegistry.push({ id: p, name: p, isHidden: false, createdAt: new Date().toISOString() });
+          });
+      }
+
+      return loadedData as AppState;
+  };
+
   // Load initial data (Hybrid: DB or LocalStorage)
   useEffect(() => {
     const loadData = async () => {
@@ -78,11 +128,11 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
                 if (error) throw error;
 
                 if (data && data.content) {
-                    const loadedData = data.content as AppState;
-                    setState(prev => ({...prev, ...loadedData, mode: prev.mode})); 
+                    const migratedData = migrateState(data.content);
+                    setState(prev => ({...prev, ...migratedData, mode: prev.mode})); 
                     setDbStatus('connected');
                 } else {
-                    // Create entry if not exists
+                    // Create entry if not exists (First login)
                     const { error: insertError } = await supabase
                         .from('dashboards')
                         .insert({ user_id: userId, content: state });
@@ -94,9 +144,10 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
                 const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
                 if (localData) {
                     const parsed = JSON.parse(localData);
-                    setState(prev => ({...prev, ...parsed, mode: prev.mode}));
+                    const migratedData = migrateState(parsed);
+                    setState(prev => ({...prev, ...migratedData, mode: prev.mode}));
                 }
-                setDbStatus('disconnected'); // Not connected to DB, but "Ready" locally
+                setDbStatus('disconnected');
             }
         } catch (err) {
             console.error("Data Load Error:", err);
@@ -108,7 +159,7 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
     loadData();
   }, [userId, supabase]);
 
-  // Auto-save (Hybrid)
+  // Auto-save (Hybrid) - SAVES THE ENTIRE ROOT STATE (INCLUDING REGISTRY)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   useEffect(() => {
@@ -116,13 +167,13 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
 
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      // Se estiver offline, não mostra 'syncing' visualmente para não poluir, ou mostra? 
-      // Vamos mostrar syncing apenas se tiver user. Se for local, é instantaneo.
       if (userId) setDbStatus('syncing');
 
       timeoutRef.current = setTimeout(async () => {
         try {
             if (userId && supabase) {
+                // We save 'state', which includes 'siteRegistry' at the root level.
+                // This ensures global persistence.
                 const { error } = await supabase
                     .from('dashboards')
                     .upsert({ 
@@ -165,6 +216,7 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
   const setSegment = (segment: Segment) => updateState('segment', segment);
   const toggleMode = () => updateState('mode', state.mode === 'weekly' ? 'annual' : 'weekly');
 
+  // --- FW Actions ---
   const updateFwMetric = (
     area: 'organic' | 'paid' | 'pipe',
     subArea: string,
@@ -209,6 +261,7 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
       });
   };
   
+  // --- Social Actions ---
   const updateSocialMetric = (network: string, metric: string, weekIndex: number, value: string | number) => {
     updateNestedState(draft => {
       const socialData = draft.data['Redes Sociais'][draft.year][draft.month] as SocialMonth;
@@ -256,6 +309,83 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
     });
   };
 
+  // --- Site Actions ---
+  const updateSiteKpi = (metric: keyof SiteMonth['kpis'], value: number | string) => {
+      updateNestedState(draft => {
+          const siteData = draft.data['Site'][draft.year][draft.month] as SiteMonth;
+          siteData.kpis[metric] = value;
+      });
+  };
+
+  const updateSitePageMetric = (page: string, metric: 'views' | 'unique', weekIndex: number, value: number | string) => {
+      updateNestedState(draft => {
+          const siteData = draft.data['Site'][draft.year][draft.month] as SiteMonth;
+          // Ensure page data exists in this month (lazy initialization)
+          if (!siteData.pages[page]) {
+              siteData.pages[page] = { views: ZEROS_5(), unique: ZEROS_5() };
+          }
+          siteData.pages[page][metric][weekIndex] = value;
+      });
+  };
+
+  const toggleSitePageVisibility = (pageName: string) => {
+      updateNestedState(draft => {
+          // Updates the Global Registry, not the monthly data
+          const pageDef = draft.siteRegistry.find(p => p.name === pageName);
+          if (pageDef) {
+              pageDef.isHidden = !pageDef.isHidden;
+          }
+      });
+  };
+
+  const updateSiteSource = (source: string, weekIndex: number, value: number | string) => {
+      updateNestedState(draft => {
+          const siteData = draft.data['Site'][draft.year][draft.month] as SiteMonth;
+          if (siteData.sources[source]) {
+              siteData.sources[source][weekIndex] = value;
+          }
+      });
+  };
+
+  const addSiteItem = (type: 'page' | 'source', name: string) => {
+      updateNestedState(draft => {
+          const siteData = draft.data['Site'][draft.year][draft.month] as SiteMonth;
+          
+          if (type === 'page') {
+              // 1. Add to Global Registry (Persists across months)
+              const exists = draft.siteRegistry.some(p => p.name === name);
+              if (!exists) {
+                  draft.siteRegistry.push({
+                      id: name,
+                      name: name,
+                      isHidden: false,
+                      createdAt: new Date().toISOString()
+                  });
+              }
+              // 2. Initialize data for current month immediately (UX)
+              if (!siteData.pages[name]) {
+                  siteData.pages[name] = { views: ZEROS_5(), unique: ZEROS_5() };
+              }
+          } else if (type === 'source' && !siteData.sources[name]) {
+              siteData.sources[name] = ZEROS_5();
+          }
+      });
+  };
+
+  const removeSiteItem = (type: 'page' | 'source', name: string) => {
+      updateNestedState(draft => {
+          const siteData = draft.data['Site'][draft.year][draft.month] as SiteMonth;
+          if (type === 'page') {
+              // Permanent Delete Logic
+              // Removes from registry (so it disappears from all months)
+              draft.siteRegistry = draft.siteRegistry.filter(p => p.name !== name);
+              delete siteData.pages[name]; 
+          } else if (type === 'source') {
+              delete siteData.sources[name];
+          }
+      });
+  };
+
   const exportState = () => {
     const wb = stateToWorkbook(state);
     XLSX.writeFile(wb, `camerite-dashboard-data.xlsx`);
@@ -286,6 +416,12 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
     removeSocialNetwork,
     addSocialMetric,
     removeSocialMetric,
+    updateSiteKpi,
+    updateSitePageMetric,
+    toggleSitePageVisibility,
+    updateSiteSource,
+    addSiteItem,
+    removeSiteItem,
     exportState,
     importState
   };

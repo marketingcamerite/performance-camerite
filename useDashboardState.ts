@@ -1,7 +1,7 @@
 
 import { useState, useCallback } from 'react';
 import { YEARS, SEGMENTS, ZEROS_5 } from '../constants';
-import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData } from '../types';
+import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, LandingPageData, SiteMonth } from '../types';
 import { parseBRNumber } from '../utils/helpers';
 import { stateToWorkbook, workbookToState } from '../utils/excel';
 import * as XLSX from 'xlsx';
@@ -28,6 +28,23 @@ const defaultSocialMonth = (): SocialMonth => ({
   }
 });
 
+const defaultSiteMonth = (): SiteMonth => ({
+  weeks: 5,
+  kpis: {
+    visitors: 0,
+    unique: 0,
+    bounceRate: 0,
+    avgTime: 0
+  },
+  pages: {
+    // Data is initialized empty, keys will be populated based on interaction or registry
+  },
+  sources: {
+    "Google": ZEROS_5(),
+    "Direto": ZEROS_5()
+  }
+});
+
 const generateInitialData = () => {
   const data: any = {};
   SEGMENTS.forEach(segment => {
@@ -35,6 +52,8 @@ const generateInitialData = () => {
     YEARS.forEach(year => {
       if (segment === 'Redes Sociais') {
         data[segment][year] = Array.from({ length: 12 }, defaultSocialMonth);
+      } else if (segment === 'Site') {
+        data[segment][year] = Array.from({ length: 12 }, defaultSiteMonth);
       } else {
         data[segment][year] = Array.from({ length: 12 }, defaultFWMonth);
       }
@@ -54,6 +73,7 @@ const useDashboardState = () => {
     segment: 'Franquias',
     mode: 'weekly',
     data: generateInitialData(),
+    siteRegistry: [],
   });
 
   const updateState = useCallback(<T,>(key: keyof AppState, value: T) => {

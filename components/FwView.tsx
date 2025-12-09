@@ -7,7 +7,7 @@ import DynamicListManager from './DynamicListManager';
 import PaidDataTable from './PaidDataTable';
 import { sum, parseBRNumber } from '../utils/helpers';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter, ZAxis, AreaChart, Area
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter, ZAxis, AreaChart, Area, Cell
 } from 'recharts';
 import { WEEK_LABELS, MONTHS } from '../constants';
 
@@ -342,7 +342,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} cursor={{fill: '#1e293b', opacity: 0.5}} />
                                     <Bar dataKey="value" name="Volume" radius={[0, 4, 4, 0]}>
                                         {funnelData.map((entry, index) => (
-                                            <cell key={`cell-${index}`} fill={entry.fill} />
+                                            <Cell key={`cell-${index}`} fill={entry.fill} />
                                         ))}
                                     </Bar>
                                 </BarChart>

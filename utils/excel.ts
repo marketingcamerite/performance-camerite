@@ -1,6 +1,6 @@
 
 import * as XLSX from 'xlsx';
-import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData } from '../types';
+import type { AppState, Segment, FWMonth, SocialMonth, WeeklyData, SiteMonth, SitePageRegistryItem } from '../types';
 import { YEARS, SEGMENTS } from '../constants';
 import { parseBRNumber } from './helpers';
 
@@ -23,13 +23,19 @@ export const stateToWorkbook = (state: AppState): XLSX.WorkBook => {
     data: (number | string)[]
   ) => {
     const numericData = data.map(v => parseBRNumber(v));
-    // Ensure strictly 5 elements if needed, though WeeklyData usually is 5. 
-    // If data is missing, fill with 0.
     while(numericData.length < 5) numericData.push(0);
     const finalData = numericData.slice(0, 5);
 
     rows.push([segment, year, month, cat, sub, item, metric, ...finalData] as ExcelRow);
   };
+
+  // Export Site Registry (using a special "Config" segment or Year -1)
+  // We will store it as: Segment='Global', Year=-1, Month=-1, Cat='Site', Sub='Registry', Item=PageName, Metric='hidden', Value=[1/0]
+  if (state.siteRegistry) {
+      state.siteRegistry.forEach(page => {
+          pushRow('Global', -1, -1, 'Site', 'Registry', page.name, 'hidden', [page.isHidden ? 1 : 0, 0,0,0,0]);
+      });
+  }
 
   SEGMENTS.forEach(segment => {
     YEARS.forEach(year => {
@@ -37,8 +43,6 @@ export const stateToWorkbook = (state: AppState): XLSX.WorkBook => {
       if (!state.data[segment][year]) return;
 
       state.data[segment][year].forEach((monthData, monthIndex) => {
-        // Skip empty months to reduce file size, or keep them? 
-        // Better to keep structure if initialized, but checks are safer.
         if (!monthData) return;
 
         if (segment === 'Redes Sociais') {
@@ -48,6 +52,23 @@ export const stateToWorkbook = (state: AppState): XLSX.WorkBook => {
               pushRow(segment, year, monthIndex, 'Social', 'Network', network, metric, values);
             });
           });
+        } else if (segment === 'Site') {
+          const sData = monthData as SiteMonth;
+          // Sources
+          Object.entries(sData.sources).forEach(([source, values]) => {
+            pushRow(segment, year, monthIndex, 'Site', 'Sources', source, 'visitors', values);
+          });
+          // Pages
+          Object.entries(sData.pages).forEach(([page, pageData]) => {
+             pushRow(segment, year, monthIndex, 'Site', 'Pages', page, 'views', pageData.views);
+             pushRow(segment, year, monthIndex, 'Site', 'Pages', page, 'unique', pageData.unique);
+          });
+          // KPIs (Monthly totals stored in first week column)
+          pushRow(segment, year, monthIndex, 'Site', 'KPIs', 'Monthly', 'visitors', [sData.kpis.visitors,0,0,0,0]);
+          pushRow(segment, year, monthIndex, 'Site', 'KPIs', 'Monthly', 'unique', [sData.kpis.unique,0,0,0,0]);
+          pushRow(segment, year, monthIndex, 'Site', 'KPIs', 'Monthly', 'bounceRate', [sData.kpis.bounceRate,0,0,0,0]);
+          pushRow(segment, year, monthIndex, 'Site', 'KPIs', 'Monthly', 'avgTime', [sData.kpis.avgTime,0,0,0,0]);
+
         } else {
           const fData = monthData as FWMonth;
           
@@ -99,6 +120,7 @@ export const workbookToState = (file: File, currentData: AppState): Promise<AppS
 
         // Deep clone current state to modify it
         const newState: AppState = JSON.parse(JSON.stringify(currentData));
+        if (!newState.siteRegistry) newState.siteRegistry = [];
 
         // Skip header row (index 0)
         for (let i = 1; i < jsonData.length; i++) {
@@ -107,33 +129,66 @@ export const workbookToState = (file: File, currentData: AppState): Promise<AppS
 
           const [segmentStr, yearRaw, monthRaw, cat, sub, item, metric, ...weeksRaw] = row;
           
-          const segment = segmentStr as Segment;
+          const segment = segmentStr;
           const year = parseInt(yearRaw);
           const monthIndex = parseInt(monthRaw);
           
           const weeks: number[] = weeksRaw.slice(0, 5).map((v: any) => parseBRNumber(v));
-          while(weeks.length < 5) weeks.push(0); // Ensure 5 weeks
+          while(weeks.length < 5) weeks.push(0); 
 
-          // Basic validation
-          if (!SEGMENTS.includes(segment) || !YEARS.includes(year) || monthIndex < 0 || monthIndex > 11) continue;
+          // Handle Global Registry
+          if (segment === 'Global' && cat === 'Site' && sub === 'Registry') {
+              const existingIndex = newState.siteRegistry.findIndex(p => p.name === item);
+              const isHidden = weeks[0] === 1;
+              if (existingIndex >= 0) {
+                  newState.siteRegistry[existingIndex].isHidden = isHidden;
+              } else {
+                  newState.siteRegistry.push({ id: item, name: item, isHidden, createdAt: new Date().toISOString() });
+              }
+              continue;
+          }
 
-          // Ensure path exists (if importing into a fresh state)
-          // For this implementation, we rely on the structure already being there (from default state)
-          // or we dynamically create it. Since useDashboardState initializes structure, we just assume it's there.
-          // If importing completely new keys (like new Social Networks), we might need to create them.
+          if (!SEGMENTS.includes(segment as any) || !YEARS.includes(year) || monthIndex < 0 || monthIndex > 11) continue;
 
           if (segment === 'Redes Sociais') {
              const mData = newState.data[segment][year][monthIndex] as SocialMonth;
              if (!mData.networks[item]) {
-                mData.networks[item] = {}; // Create network if missing
-                // Also ensure it's in metrics list if we want to be thorough, 
-                // but standard UI logic adds metrics globally. We'll just add the data.
+                mData.networks[item] = {}; 
              }
              mData.networks[item][metric] = weeks;
              if(!mData.metrics.includes(metric)) mData.metrics.push(metric);
 
+          } else if (segment === 'Site') {
+             const sData = newState.data[segment][year][monthIndex] as SiteMonth;
+             if (sub === 'Sources') {
+                 sData.sources[item] = weeks;
+             } else if (sub === 'Pages') {
+                 // Ensure data structure exists
+                 if (!sData.pages[item]) sData.pages[item] = { views: [0,0,0,0,0], unique: [0,0,0,0,0] };
+                 
+                 // If page is not in registry, add it (fallback)
+                 if (!newState.siteRegistry.some(p => p.name === item)) {
+                     newState.siteRegistry.push({ id: item, name: item, isHidden: false });
+                 }
+
+                 if (metric === 'views' || metric === 'unique') {
+                     sData.pages[item][metric] = weeks;
+                 }
+                 // Legacy handling: if metric is config_hidden from old exports
+                 if (metric === 'config_hidden') {
+                      const regItem = newState.siteRegistry.find(p => p.name === item);
+                      if (regItem) regItem.isHidden = weeks[0] === 1;
+                 }
+
+             } else if (sub === 'KPIs') {
+                 if (metric === 'visitors') sData.kpis.visitors = weeks[0];
+                 if (metric === 'unique') sData.kpis.unique = weeks[0];
+                 if (metric === 'bounceRate') sData.kpis.bounceRate = weeks[0];
+                 if (metric === 'avgTime') sData.kpis.avgTime = weeks[0];
+             }
+
           } else {
-            const mData = newState.data[segment][year][monthIndex] as FWMonth;
+            const mData = newState.data[segment as Segment][year][monthIndex] as FWMonth;
 
             if (cat === 'Organic' && sub === 'Sources') {
                mData.organic.sources[item] = weeks;

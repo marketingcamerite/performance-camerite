@@ -2,27 +2,26 @@
   "name": "camerite-marketing-dashboard",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://marketingcamerite.github.io/performance-camerite/",
   "type": "module",
+  "homepage": "https://marketingcamerite.github.io/performance-camerite/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "gh-pages -d docs"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.12.7",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.4.1",
     "xlsx": "latest",
-    "@supabase/supabase-js": "^2.39.8"
+    "@supabase/supabase-js": "2.39.8",
+    "vite": "^7.2.2",
+    "@vitejs/plugin-react": "^5.1.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "typescript": "^5.5.3",
-    "vite": "^5.4.1",
-    "gh-pages": "^6.1.1"
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   }
 }
