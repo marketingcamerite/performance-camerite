@@ -4,8 +4,10 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/performance-camerite/', // Nome exato do repositório entre barras
+  // O base deve ser o nome exato do repositório entre barras
+  base: '/Projeto-Franqueado/',
   build: {
-    outDir: 'docs', // Força o build para a pasta 'docs'
+    // Força o build a gerar a pasta 'docs' em vez de 'dist'
+    outDir: 'docs',
   }
 })
