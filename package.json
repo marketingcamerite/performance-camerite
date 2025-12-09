@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://marketingcamerite.github.io/Projeto-Franqueado",
+  "homepage": "https://marketingcamerite.github.io/performance-camerite",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
