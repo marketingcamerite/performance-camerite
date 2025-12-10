@@ -116,6 +116,12 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
     </div>
   );
 
+  // FILTER LOGIC FOR PAGES LIST
+  // If showHidden is false, we filter out hidden pages from the list passed to DynamicListManager
+  const visiblePageNames = registry
+      .filter(p => showHidden || !p.isHidden)
+      .map(p => p.name);
+
   return (
     <div className="space-y-8 pb-10">
       
@@ -173,11 +179,17 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                 onRemove={(name) => actions.removeSiteItem('source', name)}
                 itemTypeLabel="Origem"
                 renderTable={(name) => (
-                    <PaidDataTable 
-                        rows={[{ key: 'visitors', label: 'Visitantes', type: 'input' }]}
-                        data={{ visitors: data.sources[name] }}
-                        onUpdate={(_, w, v) => actions.updateSiteSource(name, w, v)}
-                    />
+                    <div className="mt-6 mb-2">
+                        {/* Title Logic Added */}
+                        <div className="flex items-center gap-2 mb-2 pl-2 border-l-2 border-violet-500">
+                             <h4 className="font-bold text-slate-200 text-lg">{name}</h4>
+                        </div>
+                        <PaidDataTable 
+                            rows={[{ key: 'visitors', label: 'Visitantes', type: 'input' }]}
+                            data={{ visitors: data.sources[name] }}
+                            onUpdate={(_, w, v) => actions.updateSiteSource(name, w, v)}
+                        />
+                    </div>
                 )}
             />
 
@@ -193,28 +205,24 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                      </button>
                 </div>
                 
-                {/* We use a custom render loop here instead of DynamicListManager's automatic rendering
-                    because we need to iterate over the REGISTRY, not just keys in data object */}
                 <DynamicListManager
                     title=""
-                    // Pass existing registry names to list manager so duplicates are checked
-                    items={registry.map(p => p.name)} 
+                    // Pass filtered items based on showHidden state
+                    items={visiblePageNames} 
                     onAdd={(name) => actions.addSiteItem('page', name)}
                     onRemove={(name) => actions.removeSiteItem('page', name)} // Removes from Registry (Permanent)
                     itemTypeLabel="Página"
-                    // Custom table renderer to handle visibility logic
                     renderTable={(name) => {
                         const pageDef = registry.find(p => p.name === name);
-                        if (!pageDef) return null; // Should not happen
-                        if (pageDef.isHidden && !showHidden) return null; // Skip hidden pages
+                        if (!pageDef) return null; 
 
                         // Safely get data (or init virtual zeroed data)
                         const pageValues = getPageData(name);
 
                         return (
-                            <div className={`transition-all ${pageDef.isHidden ? 'opacity-50 grayscale border-l-2 border-red-500 pl-4' : ''}`}>
+                            <div className={`transition-all mt-4 ${pageDef.isHidden ? 'opacity-50 grayscale border-l-2 border-red-500 pl-4 bg-red-900/5 rounded-r-lg pr-2 py-2' : ''}`}>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <h4 className="font-semibold text-slate-300">{name}</h4>
+                                    <h4 className="font-semibold text-slate-300 text-lg">{name}</h4>
                                     <button 
                                         onClick={() => actions.toggleSitePageVisibility(name)}
                                         title={pageDef.isHidden ? "Reativar página" : "Ocultar página (Global)"}
@@ -222,7 +230,7 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                                     >
                                         {pageDef.isHidden ? <EyeOffIcon /> : <EyeIcon />}
                                     </button>
-                                    {pageDef.isHidden && <span className="text-xs text-red-400">(Inativo/Oculto)</span>}
+                                    {pageDef.isHidden && <span className="text-xs text-red-400 font-bold tracking-wide uppercase">(Inativo)</span>}
                                 </div>
                                 <PaidDataTable 
                                     rows={[

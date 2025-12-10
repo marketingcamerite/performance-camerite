@@ -1,7 +1,7 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { YEARS, MONTHS } from '../constants';
-import { LogoIcon, ImportIcon, ExportIcon, SettingsIcon, DatabaseIcon } from './Icons';
+import { LogoIcon, SettingsIcon, DatabaseIcon } from './Icons';
 import type { Segment } from '../types';
 
 interface HeaderProps {
@@ -11,11 +11,12 @@ interface HeaderProps {
   onMonthChange: (month: number) => void;
   isAnnualView: boolean;
   onToggleAnnualView: () => void;
-  onImport: (file: File) => void;
-  onExport: () => void;
   onOpenSettings: () => void;
   dbStatus: 'disconnected' | 'connected' | 'syncing' | 'error';
-  // New Props for Tab Management
+  // Auth Props
+  session: any;
+  onLogout: () => void;
+  // Tab Management Props
   allSegments?: Segment[];
   visibleSegments?: Segment[];
   onToggleSegment?: (s: Segment) => void;
@@ -28,41 +29,19 @@ const Header: React.FC<HeaderProps> = ({
   onMonthChange,
   isAnnualView,
   onToggleAnnualView,
-  onImport,
-  onExport,
   onOpenSettings,
   dbStatus,
+  session,
+  onLogout,
   allSegments = [],
   visibleSegments = [],
   onToggleSegment = (_: Segment) => {}
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPrefsOpen, setIsPrefsOpen] = useState(false);
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      onImport(file);
-    }
-    event.target.value = '';
-  };
   
   const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
     <select {...props} className={`bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none transition cursor-pointer ${props.className}`} />
   );
-
-  const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & {variant?:'primary'|'secondary'}> = ({variant = 'secondary', ...props}) => {
-    const baseClasses = "px-3 py-2 text-sm font-semibold rounded-md flex items-center gap-2 transition";
-    const variantClasses = {
-      primary: 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-900/50',
-      secondary: 'bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 hover:border-slate-500'
-    };
-    return <button {...props} className={`${baseClasses} ${variantClasses[variant]} ${props.className}`} />;
-  }
 
   const getStatusColor = () => {
       switch(dbStatus) {
@@ -72,6 +51,9 @@ const Header: React.FC<HeaderProps> = ({
           default: return 'text-slate-500';
       }
   };
+
+  const userEmail = session?.user?.email || '';
+  const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : '?';
 
   return (
     <>
@@ -93,6 +75,7 @@ const Header: React.FC<HeaderProps> = ({
                 {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
               </Select>
             </div>
+            
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none group hidden md:flex">
                <div className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-300 ${isAnnualView ? 'bg-violet-600' : 'bg-slate-700'}`}>
                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${isAnnualView ? 'translate-x-4' : 'translate-x-0'}`}></div>
@@ -120,10 +103,29 @@ const Header: React.FC<HeaderProps> = ({
                 <span className="text-xs text-slate-400 hidden md:inline">DB</span>
             </button>
 
-            <div className="flex items-center gap-2 ml-2">
-                <Button onClick={handleImportClick}> <ImportIcon /> <span className='hidden lg:inline'>Importar</span></Button>
-                <Button onClick={onExport} variant="primary"> <ExportIcon /> <span className='hidden lg:inline'>Exportar</span></Button>
-                <input type="file" accept=".xlsx, .xls, .json" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+            {/* Auth Section */}
+            <div className="pl-2 ml-2 border-l border-slate-700 flex items-center">
+                {session ? (
+                    <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-inner" title={userEmail}>
+                            {userInitial}
+                         </div>
+                         <button 
+                            onClick={onLogout}
+                            className="text-slate-400 hover:text-red-400 transition"
+                            title="Sair"
+                         >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                         </button>
+                    </div>
+                ) : (
+                    // Fallback button just in case session is null inside Dashboard (should be handled by App.tsx)
+                    <button className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-md font-medium transition">
+                        Entrar
+                    </button>
+                )}
             </div>
           </div>
         </div>
