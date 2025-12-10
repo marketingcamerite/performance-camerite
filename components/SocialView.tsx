@@ -8,7 +8,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { WEEK_LABELS } from '../constants';
-import { parseBRNumber } from '../utils/helpers';
+import { parseBRNumber, filterActiveWeeks } from '../utils/helpers';
 
 
 interface SocialViewProps {
@@ -19,6 +19,15 @@ interface SocialViewProps {
   onAddMetric: (name: string) => void;
   onRemoveMetric: (name: string) => void;
 }
+
+const tooltipStyle = {
+  backgroundColor: '#0f172a',
+  border: '1px solid #1e293b',
+  borderRadius: '8px',
+  color: '#f1f5f9',
+  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)'
+};
+const tooltipItemStyle = { color: '#cbd5e1' };
 
 const SocialView: React.FC<SocialViewProps> = ({ data, onUpdate, onAddNetwork, onRemoveNetwork, onAddMetric, onRemoveMetric }) => {
   const [selectedNetwork, setSelectedNetwork] = useState(Object.keys(data.networks)[0] || '');
@@ -33,7 +42,7 @@ const SocialView: React.FC<SocialViewProps> = ({ data, onUpdate, onAddNetwork, o
       }
   }, [data, selectedNetwork, selectedMetric]);
   
-  const chartData = WEEK_LABELS.map((name, i) => {
+  const rawChartData = WEEK_LABELS.map((name, i) => {
     const networkData = data.networks[selectedNetwork];
     const value = networkData && networkData[selectedMetric] ? networkData[selectedMetric][i] : 0;
     return {
@@ -41,6 +50,8 @@ const SocialView: React.FC<SocialViewProps> = ({ data, onUpdate, onAddNetwork, o
       value: parseBRNumber(value),
     };
   });
+
+  const chartData = filterActiveWeeks(rawChartData, ['value']);
   
   const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
     <select {...props} className={`bg-slate-700/80 border border-slate-600 rounded-md px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none transition ${props.className}`} />
@@ -93,12 +104,12 @@ const SocialView: React.FC<SocialViewProps> = ({ data, onUpdate, onAddNetwork, o
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                 <XAxis dataKey="name" stroke="#9ca3af" />
                 <YAxis stroke="#9ca3af" />
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                 <Legend />
-                <Line type="monotone" dataKey="value" name={`${selectedNetwork} - ${selectedMetric}`} stroke="#8b5cf6" />
+                <Line type="monotone" dataKey="value" name={`${selectedNetwork} - ${selectedMetric}`} stroke="#8b5cf6" strokeWidth={2} dot={{r: 4}} />
               </LineChart>
             </ResponsiveContainer>
           </div>

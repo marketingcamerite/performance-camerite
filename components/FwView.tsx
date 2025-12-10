@@ -5,7 +5,7 @@ import Card from './Card';
 import KpiCards from './KpiCards';
 import DynamicListManager from './DynamicListManager';
 import PaidDataTable from './PaidDataTable';
-import { sum, parseBRNumber } from '../utils/helpers';
+import { sum, parseBRNumber, filterActiveWeeks } from '../utils/helpers';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter, ZAxis, AreaChart, Area, Cell
 } from 'recharts';
@@ -18,7 +18,16 @@ interface FwViewProps {
   actions: any;
 }
 
-// Components defined outside to prevent focus loss issues
+// Styles for Recharts Tooltip to ensure readability
+const tooltipStyle = {
+  backgroundColor: '#0f172a',
+  border: '1px solid #1e293b',
+  borderRadius: '8px',
+  color: '#f1f5f9',
+  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)'
+};
+const tooltipItemStyle = { color: '#cbd5e1' };
+
 const SectionTitle: React.FC<{title: string; subtitle: string}> = ({title, subtitle}) => (
     <div className="mb-6 mt-10 pl-2 border-l-4 border-violet-500">
         <h2 className="text-2xl font-bold text-white tracking-tight">{title}</h2>
@@ -68,7 +77,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
   const totalInvestment = sum(data.paid.meta.investimento) + sum(data.paid.google.investimento);
 
   // Chart data preparation
-  const weeklyChartData = WEEK_LABELS.map((name, i) => {
+  const rawWeeklyData = WEEK_LABELS.map((name, i) => {
     const metaInvest = parseBRNumber(data.paid.meta.investimento[i]);
     const googleInvest = parseBRNumber(data.paid.google.investimento[i]);
     const totalInvest = metaInvest + googleInvest;
@@ -103,6 +112,11 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
       convOppSale: opportunities > 0 ? (sales / opportunities) * 100 : 0,
     }
   });
+
+  // Apply Smart Filter for weeks
+  const weeklyChartData = filterActiveWeeks(rawWeeklyData, [
+    'investimentoTotal', 'leads', 'oportunidades', 'vendas', 'leadsConquistadosMeta', 'leadsConquistadosGoogle'
+  ]);
 
   const funnelData = [
       { name: 'Leads', value: sum(data.pipe.leads), fill: '#60a5fa' },
@@ -251,7 +265,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                 <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                 <YAxis stroke="#64748b" tick={{fontSize: 12}} />
-                                <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                 <Legend />
                                 <Line type="monotone" dataKey="alcance" name="Alcance" stroke="#8b5cf6" strokeWidth={2} dot={{r: 4}} />
                                 <Line type="monotone" dataKey="cliques" name="Cliques" stroke="#34d399" strokeWidth={2} dot={{r: 4}} />
@@ -271,7 +285,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val/1000}k`} tick={{fontSize: 12}} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} cursor={{fill: '#1e293b', opacity: 0.5}} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} cursor={{fill: '#1e293b', opacity: 0.5}} />
                                     <Legend />
                                     <Bar dataKey="investimentoMeta" name="Meta" stackId="a" fill="#8b5cf6" radius={[0, 0, 4, 4]} />
                                     <Bar dataKey="investimentoGoogle" name="Google" stackId="a" fill="#34d399" radius={[4, 4, 0, 0]} />
@@ -282,7 +296,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
                                     <Legend />
                                     <Line type="monotone" dataKey="cpl" name="CPL" stroke="#f59e0b" strokeWidth={3} dot={{r: 4, fill: '#f59e0b', strokeWidth: 2, stroke:'#0f172a'}} />
                                 </LineChart>
@@ -292,7 +306,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis stroke="#64748b" tickFormatter={(val) => `R$${val}`} tick={{fontSize: 12}} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} />
                                     <Legend />
                                     <Line type="monotone" dataKey="cpo" name="CPO" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke:'#0f172a'}} />
                                 </LineChart>
@@ -303,7 +317,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <XAxis type="number" dataKey="leads" name="Leads" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis type="number" dataKey="oportunidades" name="Oportunidades" stroke="#64748b" tick={{fontSize: 12}} />
                                     <ZAxis type="number" range={[100]} />
-                                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}/>
+                                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                     <Legend/>
                                     <Scatter name="Semanas" data={weeklyChartData} fill="#3b82f6"/>
                                 </ScatterChart>
@@ -315,7 +329,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                             <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                             <YAxis stroke="#64748b" tick={{fontSize: 12}} />
-                                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                             <Legend />
                                             <Line type="monotone" dataKey="leadsPlanejadosMeta" name="Meta Planejado" stroke="#a78bfa" strokeDasharray="5 5" strokeWidth={2} />
                                             <Line type="monotone" dataKey="leadsConquistadosMeta" name="Meta Conquistado" stroke="#8b5cf6" strokeWidth={2} />
@@ -339,7 +353,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis type="number" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis dataKey="name" type="category" stroke="#64748b" tick={{fontSize: 12}} width={100} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} cursor={{fill: '#1e293b', opacity: 0.5}} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} cursor={{fill: '#1e293b', opacity: 0.5}} />
                                     <Bar dataKey="value" name="Volume" radius={[0, 4, 4, 0]}>
                                         {funnelData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -368,7 +382,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                     <YAxis stroke="#64748b" tick={{fontSize: 12}} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                     <Legend />
                                     <Area type="monotone" dataKey="leads" name="Leads" stroke="#60a5fa" fillOpacity={1} fill="url(#colorLeads)" />
                                     <Area type="monotone" dataKey="oportunidades" name="Oportunidades" stroke="#a78bfa" fillOpacity={1} fill="url(#colorOpps)" />
@@ -384,7 +398,7 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
                                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                             <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
                                             <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={val => `${val.toFixed(0)}%`} />
-                                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }} formatter={(val: number) => `${val.toFixed(2)}%`} />
+                                            <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} formatter={(val: number) => `${val.toFixed(2)}%`} />
                                             <Legend />
                                             <Line type="monotone" dataKey="convLeadOpp" name="Conversão Lead → Opp" stroke="#fbbf24" strokeWidth={2} dot={{r: 4}} />
                                             <Line type="monotone" dataKey="convOppSale" name="Conversão Opp → Venda" stroke="#34d399" strokeWidth={2} dot={{r: 4}} />

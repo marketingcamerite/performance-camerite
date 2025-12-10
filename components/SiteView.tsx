@@ -5,7 +5,7 @@ import Card from './Card';
 import DynamicListManager from './DynamicListManager';
 import PaidDataTable from './PaidDataTable';
 import { EyeIcon, EyeOffIcon } from './Icons';
-import { formatNumber, sum, parseBRNumber } from '../utils/helpers';
+import { formatNumber, sum, parseBRNumber, filterActiveWeeks } from '../utils/helpers';
 import { WEEK_LABELS, MONTHS, ZEROS_5 } from '../constants';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -18,6 +18,15 @@ interface SiteViewProps {
   fullYearData: SiteMonth[];
   actions: any;
 }
+
+const tooltipStyle = {
+  backgroundColor: '#0f172a',
+  border: '1px solid #1e293b',
+  borderRadius: '8px',
+  color: '#f1f5f9',
+  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)'
+};
+const tooltipItemStyle = { color: '#cbd5e1' };
 
 const MonthlyInput: React.FC<{
   label: string; 
@@ -56,7 +65,7 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
 
   // --- CHART PREP ---
   // Weekly aggregation
-  const weeklyData = WEEK_LABELS.map((label, i) => {
+  const rawWeeklyData = WEEK_LABELS.map((label, i) => {
       let totalViews = 0;
       let totalUnique = 0;
 
@@ -75,6 +84,8 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
           unique: totalUnique
       };
   });
+
+  const weeklyData = filterActiveWeeks(rawWeeklyData, ['views', 'unique']);
 
   // Top Pages (Current Month Total)
   const topPagesData = registry
@@ -245,7 +256,7 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                 <XAxis dataKey="name" stroke="#64748b" />
                                 <YAxis stroke="#64748b" />
-                                <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                 <Legend />
                                 <Line type="monotone" dataKey="visitors" name="Visitantes" stroke="#8b5cf6" strokeWidth={2} dot={{r:4}} />
                                 <Line type="monotone" dataKey="unique" name="Únicos" stroke="#34d399" strokeWidth={2} dot={{r:4}} />
@@ -262,7 +273,7 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis dataKey="name" stroke="#64748b" />
                                     <YAxis stroke="#64748b" />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
                                     <Legend />
                                     <Line type="monotone" dataKey="views" name="Pageviews" stroke="#8b5cf6" strokeWidth={2} />
                                     <Line type="monotone" dataKey="unique" name="Únicas" stroke="#34d399" strokeWidth={2} />
@@ -278,7 +289,7 @@ const SiteView: React.FC<SiteViewProps> = ({ data, registry, isAnnualView, fullY
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                                     <XAxis type="number" stroke="#64748b" />
                                     <YAxis type="category" dataKey="name" stroke="#64748b" width={100} />
-                                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} cursor={{fill: '#1e293b', opacity: 0.5}} />
+                                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} cursor={{fill: '#1e293b', opacity: 0.5}} />
                                     <Bar dataKey="totalViews" name="Views" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>

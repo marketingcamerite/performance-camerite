@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import SegmentTabs from './components/SegmentTabs';
@@ -16,6 +17,31 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // -- TAB VISIBILITY MANAGEMENT --
+  const [visibleSegments, setVisibleSegments] = useState<Segment[]>(() => {
+    const saved = localStorage.getItem('dashboard_visible_tabs');
+    return saved ? JSON.parse(saved) : [...SEGMENTS];
+  });
+
+  const handleToggleSegment = (segment: Segment) => {
+    setVisibleSegments(prev => {
+      const isVisible = prev.includes(segment);
+      let newSet;
+      if (isVisible) {
+        // Prevent hiding all tabs
+        if (prev.length === 1) return prev; 
+        newSet = prev.filter(s => s !== segment);
+      } else {
+        // Maintain original order based on SEGMENTS constant
+        const pendingSet = [...prev, segment];
+        newSet = SEGMENTS.filter(s => pendingSet.includes(s));
+      }
+      localStorage.setItem('dashboard_visible_tabs', JSON.stringify(newSet));
+      return newSet;
+    });
+  };
+  // -------------------------------
 
   useEffect(() => {
     // Check for existing session
@@ -68,7 +94,9 @@ const App: React.FC = () => {
       <DashboardContent 
         supabase={supabaseClient} 
         session={session} 
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
+        visibleSegments={visibleSegments}
+        onToggleSegment={handleToggleSegment}
       />
     </div>
   );
@@ -79,8 +107,17 @@ const DashboardContent: React.FC<{
   supabase: SupabaseClient;
   session: any;
   onLogout: () => void;
-}> = ({ supabase, session, onLogout }) => {
+  visibleSegments: Segment[];
+  onToggleSegment: (s: Segment) => void;
+}> = ({ supabase, session, onLogout, visibleSegments, onToggleSegment }) => {
   const { state, dbStatus, ...actions } = useDashboardState(supabase, session?.user?.id || null);
+
+  // Safety: If current segment is hidden, switch to the first visible one
+  useEffect(() => {
+    if (!visibleSegments.includes(state.segment) && visibleSegments.length > 0) {
+      actions.setSegment(visibleSegments[0]);
+    }
+  }, [visibleSegments, state.segment, actions]);
 
   const handleSegmentChange = (segment: Segment) => {
     actions.setSegment(segment);
@@ -98,17 +135,21 @@ const DashboardContent: React.FC<{
           onMonthChange={actions.setMonth}
           isAnnualView={state.mode === 'annual'}
           onToggleAnnualView={actions.toggleMode}
-          onOpenSettings={() => {}} // No-op as settings modal is removed/replaced by direct login
+          onOpenSettings={() => {}} 
           dbStatus={dbStatus}
           userEmail={session?.user?.email}
           onLogout={onLogout}
           onImport={actions.importState}
           onExport={actions.exportState}
+          // Tab Management Props
+          allSegments={SEGMENTS}
+          visibleSegments={visibleSegments}
+          onToggleSegment={onToggleSegment}
         />
 
         <main className="container mx-auto max-w-7xl px-4 py-8">
           <SegmentTabs
-            segments={SEGMENTS}
+            segments={visibleSegments} // Pass filtered segments
             activeSegment={state.segment}
             onSegmentChange={handleSegmentChange}
           />
@@ -126,7 +167,7 @@ const DashboardContent: React.FC<{
             ) : state.segment === 'Site' ? (
               <SiteView 
                 data={currentData as SiteMonth}
-                registry={state.siteRegistry || []} // Pass registry to SiteView
+                registry={state.siteRegistry || []} 
                 isAnnualView={state.mode === 'annual'}
                 fullYearData={state.data['Site'][state.year] as SiteMonth[]}
                 actions={actions}

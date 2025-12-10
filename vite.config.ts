@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/performance-camerite/', // Nome exato do repositório entre barras
   build: {
-    outDir: 'docs', // Define a pasta de saída para 'docs' para facilitar o deploy
+    outDir: 'docs', // Define a pasta de saída como 'docs' para o GitHub Pages
   },
 })
