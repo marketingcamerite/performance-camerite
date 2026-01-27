@@ -110,7 +110,7 @@ const DashboardContent: React.FC<{
   visibleSegments: Segment[];
   onToggleSegment: (s: Segment) => void;
 }> = ({ supabase, session, onLogout, visibleSegments, onToggleSegment }) => {
-  const { state, dbStatus, ...actions } = useDashboardState(supabase, session?.user?.id || null);
+  const { state, dbStatus, isSaving, manualSave, ...actions } = useDashboardState(supabase, session?.user?.id || null);
 
   // Safety: If current segment is hidden, switch to the first visible one
   useEffect(() => {
@@ -137,10 +137,11 @@ const DashboardContent: React.FC<{
           onToggleAnnualView={actions.toggleMode}
           onOpenSettings={() => {}} 
           dbStatus={dbStatus}
-          userEmail={session?.user?.email}
+          session={session}
           onLogout={onLogout}
-          onImport={actions.importState}
-          onExport={actions.exportState}
+          // Saving props
+          onManualSave={manualSave}
+          isSaving={isSaving}
           // Tab Management Props
           allSegments={SEGMENTS}
           visibleSegments={visibleSegments}

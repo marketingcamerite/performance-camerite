@@ -80,6 +80,7 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
   });
 
   const [dbStatus, setDbStatus] = useState<'disconnected' | 'connected' | 'syncing' | 'error'>('disconnected');
+  const [isSaving, setIsSaving] = useState(false);
   const isInitialLoad = useRef(true);
   
   // Helper to migrate legacy data structures to include new tabs/registries
@@ -159,44 +160,52 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
     loadData();
   }, [userId, supabase]);
 
-  // Auto-save (Hybrid) - SAVES THE ENTIRE ROOT STATE (INCLUDING REGISTRY)
+  // Unified Save Function
+  const saveNow = useCallback(async () => {
+    if (isInitialLoad.current) return;
+    
+    setIsSaving(true);
+    setDbStatus('syncing');
+
+    try {
+        if (userId && supabase) {
+            const { error } = await supabase
+                .from('dashboards')
+                .upsert({ 
+                    user_id: userId, 
+                    content: state, 
+                    updated_at: new Date().toISOString() 
+                });
+            if (error) throw error;
+            setDbStatus('connected');
+        } else {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+            setDbStatus('disconnected');
+        }
+    } catch (err) {
+        console.error("Save Error:", err);
+        setDbStatus('error');
+    } finally {
+        // Short delay to show the saving state in UI
+        setTimeout(() => setIsSaving(false), 500);
+    }
+  }, [state, userId, supabase]);
+
+  // Auto-save debounce effect
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   useEffect(() => {
       if (isInitialLoad.current) return;
-
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      if (userId) setDbStatus('syncing');
-
-      timeoutRef.current = setTimeout(async () => {
-        try {
-            if (userId && supabase) {
-                // We save 'state', which includes 'siteRegistry' at the root level.
-                // This ensures global persistence.
-                const { error } = await supabase
-                    .from('dashboards')
-                    .upsert({ 
-                        user_id: userId, 
-                        content: state, 
-                        updated_at: new Date().toISOString() 
-                    });
-                if (error) throw error;
-                setDbStatus('connected');
-            } else {
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-                setDbStatus('disconnected');
-            }
-        } catch (err) {
-            console.error("Save Error:", err);
-            setDbStatus('error');
-        }
-      }, 2000);
+      timeoutRef.current = setTimeout(() => {
+        saveNow();
+      }, 3000); // 3 seconds autosave delay
 
       return () => {
           if(timeoutRef.current) clearTimeout(timeoutRef.current);
       }
-  }, [state, userId, supabase]);
+  }, [state, saveNow]);
 
 
   const updateState = useCallback(<T,>(key: keyof AppState, value: T) => {
@@ -404,6 +413,8 @@ const useDashboardState = (supabase: SupabaseClient | null, userId: string | nul
   return {
     state,
     dbStatus,
+    isSaving, // Exposed to UI
+    manualSave: saveNow, // Exposed to UI
     setYear,
     setMonth,
     setSegment,

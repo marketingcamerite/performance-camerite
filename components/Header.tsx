@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { YEARS, MONTHS } from '../constants';
-import { LogoIcon, SettingsIcon, DatabaseIcon } from './Icons';
+import { LogoIcon, SettingsIcon, DatabaseIcon, SaveIcon, CheckIcon, LogoutIcon } from './Icons';
 import type { Segment } from '../types';
 
 interface HeaderProps {
@@ -16,6 +16,9 @@ interface HeaderProps {
   // Auth Props
   session: any;
   onLogout: () => void;
+  // Saving Props
+  onManualSave: () => void;
+  isSaving: boolean;
   // Tab Management Props
   allSegments?: Segment[];
   visibleSegments?: Segment[];
@@ -33,11 +36,36 @@ const Header: React.FC<HeaderProps> = ({
   dbStatus,
   session,
   onLogout,
+  onManualSave,
+  isSaving,
   allSegments = [],
   visibleSegments = [],
   onToggleSegment = (_: Segment) => {}
 }) => {
   const [isPrefsOpen, setIsPrefsOpen] = useState(false);
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+
+  // Effect to show temporary success message after saving finishes
+  useEffect(() => {
+    if (!isSaving && showSaveSuccess === false) {
+       // logic: if it *was* saving and stopped, we might want to show success?
+       // Actually simpler: when parent says isSaving=false, we check if we were saving.
+       // But parent handles the state. Let's just listen to !isSaving if we clicked? 
+       // For now, simpler approach: trigger success when isSaving goes from true to false? 
+       // React updates are batched. 
+    }
+  }, [isSaving]);
+
+  // We need a ref to track previous state to detect completion
+  const prevSavingRef = React.useRef(isSaving);
+  useEffect(() => {
+      if (prevSavingRef.current === true && isSaving === false) {
+          setShowSaveSuccess(true);
+          const timer = setTimeout(() => setShowSaveSuccess(false), 2000);
+          return () => clearTimeout(timer);
+      }
+      prevSavingRef.current = isSaving;
+  }, [isSaving]);
   
   const Select: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
     <select {...props} className={`bg-slate-800/60 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none transition cursor-pointer ${props.className}`} />
@@ -86,6 +114,30 @@ const Header: React.FC<HeaderProps> = ({
             
             <div className="h-8 w-[1px] bg-slate-700 mx-2"></div>
 
+            {/* MANUAL SAVE BUTTON */}
+            <button 
+                onClick={onManualSave}
+                disabled={isSaving}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition duration-200 border
+                    ${showSaveSuccess 
+                        ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' 
+                        : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }
+                `}
+                title="Salvar alterações agora"
+            >
+                {isSaving ? (
+                     <div className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin"></div>
+                ) : showSaveSuccess ? (
+                    <CheckIcon className="w-4 h-4" />
+                ) : (
+                    <SaveIcon className="w-4 h-4" />
+                )}
+                <span className="hidden lg:inline">
+                    {isSaving ? 'Salvando...' : showSaveSuccess ? 'Salvo!' : 'Salvar'}
+                </span>
+            </button>
+
             <button 
                 onClick={() => setIsPrefsOpen(true)}
                 className="p-2 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition"
@@ -94,34 +146,22 @@ const Header: React.FC<HeaderProps> = ({
                 <SettingsIcon className="w-5 h-5" />
             </button>
 
-            <button 
-                onClick={onOpenSettings}
-                className="flex items-center gap-2 px-2 py-2 rounded hover:bg-slate-800 transition"
-                title="Status da Conexão DB"
-            >
-                <DatabaseIcon className={getStatusColor()} />
-                <span className="text-xs text-slate-400 hidden md:inline">DB</span>
-            </button>
-
             {/* Auth Section */}
             <div className="pl-2 ml-2 border-l border-slate-700 flex items-center">
                 {session ? (
                     <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-inner" title={userEmail}>
+                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-inner select-none cursor-default" title={userEmail}>
                             {userInitial}
                          </div>
                          <button 
                             onClick={onLogout}
-                            className="text-slate-400 hover:text-red-400 transition"
+                            className="p-2 rounded-full text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition"
                             title="Sair"
                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
+                            <LogoutIcon className="w-5 h-5" />
                          </button>
                     </div>
                 ) : (
-                    // Fallback button just in case session is null inside Dashboard (should be handled by App.tsx)
                     <button className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm rounded-md font-medium transition">
                         Entrar
                     </button>
