@@ -66,7 +66,10 @@ const FwView: React.FC<FwViewProps> = ({ data, isAnnualView, fullYearData, actio
   const computeAutoLeads = (month: IFWMonth) => {
     const leadsPerWeek = [0, 0, 0, 0, 0];
     Object.values(month.organic.sources).forEach(arr => arr.forEach((v, i) => leadsPerWeek[i] += parseBRNumber(v)));
-    Object.values(month.organic.landing).forEach(lp => lp.leads.forEach((v, i) => leadsPerWeek[i] += parseBRNumber(v)));
+    
+    // REMOVED: Landing Pages calculation logic independent from main KPI as requested.
+    // Object.values(month.organic.landing).forEach(lp => lp.leads.forEach((v, i) => leadsPerWeek[i] += parseBRNumber(v)));
+
     for (let i = 0; i < 5; i++) {
         leadsPerWeek[i] += parseBRNumber(month.paid.meta.leads[i]) + parseBRNumber(month.paid.google.leads[i]);
     }
